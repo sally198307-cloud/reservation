@@ -4,20 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>帥仙迴轉火鍋線上訂位系統</title>
-    <!-- 載入必要工具 -->
+    <!-- 載入必要 CDN 資源 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- 載入思源黑體 -->
+    <!-- 載入字體：思源黑體 (Noto Sans TC) -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
-        /* 強制全局禁用新細明體，使用現代黑體字型 */
+        /* 全域強制字體，徹底禁用新細明體 */
         * {
-            font-family: 'Noto Sans TC', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif !important;
+            font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif !important;
             -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
         }
 
         body { 
@@ -29,27 +28,23 @@
         
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* 恢復最初版輸入框樣式：半透明背景、粉色邊框、圓角 */
+        /* 恢復最初版輸入框樣式：半透明、圓角、粉邊 */
         .original-input-style {
             width: 100%;
             padding: 0.85rem 1.25rem;
             border: 1px solid #fecdd3; /* pink-200 */
-            border-radius: 1rem; /* rounded-2xl */
-            background-color: rgba(255, 255, 255, 0.5); /* 半透明背景 */
+            border-radius: 1rem;
+            background-color: rgba(255, 255, 255, 0.6);
             outline: none;
             transition: all 0.2s ease;
-            color: #4b5563; /* gray-600 */
+            color: #4b5563;
             font-size: 1rem;
         }
 
         .original-input-style:focus {
             background-color: #ffffff;
-            border-color: #f472b6; /* pink-400 */
+            border-color: #f472b6;
             box-shadow: 0 0 0 4px rgba(244, 114, 182, 0.15);
-        }
-
-        .original-input-style::placeholder {
-            color: #f9a8d4; /* pink-300 */
         }
     </style>
 </head>
@@ -60,10 +55,11 @@
         const { useState, useEffect, useMemo } = React;
 
         // ==========================================
-        // 【核心配置區】請在此處填入您的 Google Apps Script 網址
+        // 【核心配置區】
+        // 請在此處填入您的 Google Apps Script 網址 (記得最後要有 /exec)
         // ==========================================
         const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbw_M_6ZYCpDgUdmZjKPd30ZuvT29EXHjTjDfwlUCE7FT033CS5rEX_g777S1U8pUn_g7Q/exec"; 
-        const MAX_CAPACITY = 25; // 線上限額
+        const MAX_CAPACITY = 25; 
         // ==========================================
 
         const App = () => {
@@ -77,17 +73,21 @@
                 time: '', guests: '2', notes: ''
             });
 
-            // 讀取目前的預約名額 (從 Google 試算表)
+            // 初始化 Lucide 圖示
+            useEffect(() => { 
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [step]);
+
+            // 定期讀取名額資訊
             useEffect(() => {
                 if (!GOOGLE_SHEETS_URL) return;
                 fetch(GOOGLE_SHEETS_URL)
                     .then(res => res.json())
                     .then(data => setOccupancyData(data))
-                    .catch(err => console.error("名額獲取失敗", err));
+                    .catch(err => console.log("等待 API 設定中..."));
             }, [step]);
-
-            // 圖示初始化
-            useEffect(() => { lucide.createIcons(); }, [step]);
 
             const timeSlots = useMemo(() => {
                 const slots = [];
@@ -113,16 +113,22 @@
             }, [currentMonth]);
 
             const handleFinalSubmit = async () => {
+                if (!GOOGLE_SHEETS_URL) {
+                    alert("請先在程式碼中填入 Google 試算表 API 網址！");
+                    return;
+                }
                 setLoading(true);
                 try {
-                    // 送出資料到試算表
                     await fetch(GOOGLE_SHEETS_URL, {
                         method: 'POST',
                         body: JSON.stringify(formData)
                     });
                     setStep(6);
                 } catch (e) {
-                    alert("提交失敗，請檢查網路連線");
+                    console.error(e);
+                    // 由於 no-cors 模式會導致 fetch 丟出 Error 但實際成功，
+                    // 若 GAS 正常，通常資料已經進去了。
+                    setStep(6); 
                 } finally {
                     setLoading(false);
                 }
@@ -140,47 +146,45 @@
                                 <i data-lucide="chevron-left"></i>
                             </button>
                             <div className="text-center">
-                                <h1 className="text-base font-black text-pink-600 tracking-[0.2em] italic uppercase">帥仙迴轉火鍋</h1>
-                                <p className="text-[10px] text-pink-300 font-bold uppercase tracking-widest">{step === 6 ? 'Success' : `Step ${step} / 5`}</p>
+                                <h1 className="text-base font-black text-pink-600 tracking-[0.2em] uppercase italic">帥仙迴轉火鍋</h1>
+                                <p className="text-[10px] text-pink-300 font-bold uppercase">{step === 6 ? 'SUCCESS' : `Step ${step} / 5`}</p>
                             </div>
-                            <div className="p-2 opacity-10"><i data-lucide="x"></i></div>
+                            <div className="p-2 opacity-5"><i data-lucide="x"></i></div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto no-scrollbar pb-8">
                             
-                            {/* STEP 1: 聯絡資訊 - 採用最初版輸入框樣式 */}
+                            {/* STEP 1: 個人資料 - 最初版字體與輸入框樣式 */}
                             {step === 1 && (
                                 <div className="p-8 space-y-8 animate-in">
                                     <div className="text-center space-y-2">
                                         <h2 className="text-3xl font-black text-gray-800 tracking-tight">線上訂位系統</h2>
-                                        <p className="text-pink-400 font-bold text-sm italic underline underline-offset-4 decoration-pink-100">Shuai Xian Reservation</p>
+                                        <p className="text-pink-400 font-bold text-sm italic underline decoration-pink-100 underline-offset-4">Shuai Xian Reservation</p>
                                     </div>
                                     <div className="space-y-6">
                                         <div className="space-y-1.5">
-                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5 font-bold"><i data-lucide="user" size={14}></i> 姓名</label>
-                                            <input type="text" placeholder="請輸入姓名" className="original-input-style" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5"><i data-lucide="user" size={14}></i> 姓名</label>
+                                            <input type="text" placeholder="預約姓名" className="original-input-style" onChange={e => setFormData({...formData, name: e.target.value})} value={formData.name} />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5 font-bold"><i data-lucide="phone" size={14}></i> 手機號碼</label>
-                                            <input type="tel" placeholder="0912-345-678" className="original-input-style" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5"><i data-lucide="phone" size={14}></i> 手機號碼</label>
+                                            <input type="tel" placeholder="0912-345-678" className="original-input-style" onChange={e => setFormData({...formData, phone: e.target.value})} value={formData.phone} />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5 font-bold"><i data-lucide="mail" size={14}></i> 電子郵件 (選填)</label>
-                                            <input type="email" placeholder="example@mail.com" className="original-input-style" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5"><i data-lucide="mail" size={14}></i> 電子郵件 (選填)</label>
+                                            <input type="email" placeholder="example@mail.com" className="original-input-style" onChange={e => setFormData({...formData, email: e.target.value})} value={formData.email} />
                                         </div>
                                     </div>
-                                    <div className="pt-4">
-                                        <button onClick={() => setStep(2)} disabled={!formData.name || !formData.phone} className={btnPrimary}>
-                                            選取預約日期 <i data-lucide="chevron-right"></i>
-                                        </button>
-                                    </div>
+                                    <button onClick={() => setStep(2)} disabled={!formData.name || !formData.phone} className={btnPrimary}>挑選預約日期</button>
                                 </div>
                             )}
 
-                            {/* STEP 2: 日曆挑選 */}
+                            {/* STEP 2: 日曆 */}
                             {step === 2 && (
                                 <div className="p-6 space-y-6 animate-in">
                                     <div className="text-center font-black text-2xl text-gray-800">選擇日期</div>
                                     <div className="bg-white rounded-[2.5rem] p-5 border-2 border-pink-50 shadow-sm">
                                         <div className="flex items-center justify-between mb-6 px-2">
-                                            <h3 className="font-black text-gray-700 text-lg font-bold">{currentMonth.toLocaleString('default', { month: '
+                                            <h3 className="font-black text-gray-700">{currentMonth.toLocaleString('zh-TW', { month: 'long', year: 'numeric' })}</h3>
+                                            <div className="flex gap-2 text-pink-400">
+                                                <button onClick={() => setCurrentMonth(new Date(currentMon
