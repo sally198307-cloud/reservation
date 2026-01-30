@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>帥仙迴轉火鍋線上訂位系統</title>
+    <!-- 載入必要套件 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        window.FB = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, query };
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* 全域字體設定，徹底禁用新細明體 */
+        * {
+            font-family: 'Noto Sans TC', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif !important;
+        }
+
+        body { 
+            background-color: #FFF5F7; 
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .animate-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 第一頁原始輸入框樣式：半透明背景、粉色邊框、圓角 */
+        .original-input-style {
+            width: 100%;
+            padding: 0.85rem 1.25rem;
+            border: 1px solid #fecdd3; /* pink-200 */
+            border-radius: 1rem; /* rounded-2xl */
+            background-color: rgba(255, 255, 255, 0.6); /* 半透明 */
+            outline: none;
+            transition: all 0.2s ease;
+            color: #4b5563; /* gray-600 */
+            font-size: 1rem;
+        }
+
+        .original-input-style:focus {
+            background-color: #ffffff;
+            border-color: #f472b6; /* pink-400 */
+            box-shadow: 0 0 0 4px rgba(244, 114, 182, 0.15);
+        }
+
+        .original-input-style::placeholder {
+            color: #f9a8d4; /* pink-300 */
+            font-weight: 400;
+        }
+
+        /* 讓按鈕與文字更有黑體質感 */
+        .font-black { font-weight: 900; }
+        .font-bold { font-weight: 700; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // ==========================================
+        // 【配置區】
+        // ==========================================
+        // 請在此處貼上您的 Google Apps Script 網址
+        const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbw62SZW_bTrvRqSA4rejm29kXSW8md06Jna6AwJQRCg9x9I2sxMro1tuA2pwqeY3AXIog/exec"; 
+        
+        const MAX_CAPACITY = 25; 
+        
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'shuai-xian-v8-final';
+        // ==========================================
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [db, setDb] = useState(null);
+            const [step, setStep] = useState(1);
+            const [loading, setLoading] = useState(false);
+            const [allBookings, setAllBookings] = useState([]);
+            const [currentMonth, setCurrentMonth] = useState(new Date());
+            const [formData, setFormData] = useState({
+                name: '', email: '', phone: '',
+                date: new Date().toISOString().split('T')[0],
+                time: '', guests: '2', notes: ''
+            });
+
+            useEffect(() => {
+                const app = FB.initializeApp(firebaseConfig);
+                const auth = FB.getAuth(app);
+                const firestore = FB.getFirestore(app);
+                setDb(firestore);
+
+                const initAuth = async () => {
+                    try { await FB.signInAnonymously(auth); } 
+                    catch (e) { console.error("Auth failed", e); }
+                };
+                initAuth();
+                const unsubscribe = FB.onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user || !db) return;
+                const bookingsRef = FB.collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
+                const unsubscribe = FB.onSnapshot(FB.query(bookingsRef), (snapshot) => {
+                    const data = snapshot.docs.map(doc => doc.data());
+                    setAllBookings(data);
+                    setTimeout(() => lucide.createIcons(), 100);
+                });
+                return () => unsubscribe();
+            }, [user, db, step]);
+
+            const timeSlots = useMemo(() => {
+                const slots = [];
+                for (let h = 11; h <= 22; h++) {
+                    const p = h >= 12 ? 'PM' : 'AM';
+                    let displayH = h > 12 ? h - 12 : h;
+                    if (displayH === 0) displayH = 12;
+                    slots.push(`${displayH}:00${p}`);
+                    if (h !== 22) slots.push(`${displayH}:30${p}`);
+                }
+                return slots;
+            }, []);
+
+            const getOccupancy = (date, time) => {
+                return allBookings
+                    .filter(b => b.date === date && b.time === time)
+                    .reduce((sum, b) => sum + parseInt(b.guests || 0), 0);
+            };
+
+            const calendarDays = useMemo(() => {
+                const y = currentMonth.getFullYear();
+                const m = currentMonth.getMonth();
+                const firstDay = new Date(y, m, 1).getDay();
+                const total = new Date(y, m + 1, 0).getDate();
+                const days = [];
+                for (let i = 0; i < firstDay; i++) days.push(null);
+                for (let i = 1; i <= total; i++) days.push(new Date(y, m, i));
+                return days;
+            }, [currentMonth]);
+
+            const handleFinalSubmit = async () => {
+                if (!user || !db) return;
+                setLoading(true);
+                try {
+                    const bookingsRef = FB.collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
+                    await FB.addDoc(bookingsRef, {
+                        ...formData,
+                        timestamp: new Date().toISOString(),
+                        uid: user.uid
+                    });
+
+                    if (GOOGLE_SHEETS_URL) {
+                        fetch(GOOGLE_SHEETS_URL, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(formData)
+                        });
+                    }
+                    setStep(6);
+                } catch (e) {
+                    alert("提交失敗，請檢查網路連線");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const btnPrimary = "w-full bg-pink-500 hover:bg-pink-600 disabled:bg-pink-100 text-white font-black py-5 rounded-[2.5rem] shadow-xl shadow-pink-100 transition-all transform active:scale-95 flex items-center justify-center gap-2";
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-0 sm:p-4">
+                    <div className="w-full max-w-md bg-white min-h-screen sm:min-h-[820px] sm:rounded-[50px] shadow-2xl flex flex-col relative border border-pink-50 overflow-hidden">
+                        
+                        {/* Header */}
+                        <div className="px-6 py-6 flex items-center justify-between border-b border-pink-50 bg-white/95 sticky top-0 z-30">
+                            <button onClick={() => step > 1 && step < 6 && setStep(step - 1)} className={`p-2 ${step > 1 && step < 6 ? 'opacity-100 text-pink-500' : 'opacity-0 cursor-default'}`}>
+                                <i data-lucide="chevron-left"></i>
+                            </button>
+                            <div className="text-center">
+                                <h1 className="text-base font-black text-pink-600 tracking-[0.2em] uppercase italic">帥仙迴轉火鍋</h1>
+                                <p className="text-[10px] text-pink-300 font-bold tracking-widest uppercase">{step === 6 ? 'Success' : `Step ${step} / 5`}</p>
+                            </div>
+                            <div className="p-2 opacity-10"><i data-lucide="x"></i></div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto no-scrollbar">
+                            
+                            {/* STEP 1: Personal Info - 原始輸入框樣式 */}
+                            {step === 1 && (
+                                <div className="p-8 space-y-8 animate-in">
+                                    <div className="text-center space-y-2">
+                                        <h2 className="text-3xl font-black text-gray-800 tracking-tight">線上訂位系統</h2>
+                                        <p className="text-pink-400 font-bold text-sm italic underline underline-offset-4 decoration-pink-100">Shuai Xian Reservation</p>
+                                    </div>
+                                    <div className="space-y-6">
+                                        <div className="space-y-1.5">
+                                            <label className="text-pink-600 text-xs font-bold px-1.5 flex items-center gap-1.5"><i data-lucide="user" size={14}></i
